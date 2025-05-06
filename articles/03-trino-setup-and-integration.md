@@ -1,4 +1,3 @@
-```markdown
 # Article 3: Deploying and Configuring Trino
 
 *Date: 2025-05-06*
