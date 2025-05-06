@@ -1,4 +1,3 @@
-```markdown
 # Article 1: Initial Kubernetes Cluster Survey and Big Data Stack Selection
 
 *Date: 2025-05-05*
