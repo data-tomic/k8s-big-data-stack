@@ -17,8 +17,7 @@ Based on an initial survey of the provided Kubernetes cluster, which includes co
 5.  **Trino (formerly PrestoSQL):** A high-performance, distributed **SQL query engine** for **interactive analytics**. It will query data directly from Minio (using Hive Metastore metadata) and potentially other connected sources (like PostgreSQL). It serves as the main query layer for BI tools.
 6.  **BI Tool (e.g., Apache Superset / Power BI):** Connects to **Trino** (or potentially PostgreSQL for specific datasets) for data visualization, exploration, and dashboarding.
 
-![Basic Architecture Diagram (Conceptual)](https://via.placeholder.com/800x300.png?text=Minio+%3C-+Hive+Metastore+%28Postgres%29+%3C-+Spark+%26+Trino+->+BI)
-*(Note: Replace placeholder with an actual diagram if desired)*
+[Basic Architecture Diagram (Conceptual)](articles/images/BasicArchitectureDiagram.png)
 
 ## Repository Structure
 
