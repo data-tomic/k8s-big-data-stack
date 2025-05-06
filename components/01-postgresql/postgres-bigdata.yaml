@@ -1,0 +1,175 @@
+# components/01-postgresql/postgres-bigdata.yaml
+#
+# Deploys a standalone PostgreSQL instance using a StatefulSet
+# intended for use by Hive Metastore and potentially other
+# components within the 'bigdata' namespace.
+# Assumes the 'longhorn' StorageClass exists.
+# Assumes the 'bigdata' namespace exists or is created separately.
+# Requires a Secret named 'postgres-bigdata-secret' to be created first.
+
+---
+# 1. PersistentVolumeClaim (Optional, but good practice to define explicitly)
+# Note: StatefulSet's volumeClaimTemplates will create a PVC named postgres-data-<pod-name> (e.g., postgres-data-postgres-0)
+# This explicit PVC definition isn't strictly necessary if using volumeClaimTemplates,
+# but included here for clarity or if you prefer pre-creating the PVC.
+# If using volumeClaimTemplates (as below), you can comment out or remove this section.
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: postgres-bigdata-pvc # If used, must match claimName in StatefulSet volumes
+#   namespace: bigdata
+# spec:
+#   accessModes:
+#     - ReadWriteOnce # Longhorn supports only RWO
+#   storageClassName: longhorn # Use your existing StorageClass
+#   resources:
+#     requests:
+#       storage: 10Gi # Request 10 GB
+
+---
+# 2. Headless Service for StatefulSet Discovery
+# Provides stable network identifiers (DNS) for pods in the StatefulSet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless # Name used by StatefulSet's serviceName
+  namespace: bigdata
+  labels:
+    app: postgres-bigdata # Label to associate with the StatefulSet
+spec:
+  ports:
+  - port: 5432
+    name: tcp-postgresql
+  clusterIP: None # Makes it a Headless Service
+  selector:
+    app: postgres-bigdata # Selects the pods managed by our StatefulSet
+
+---
+# 3. StatefulSet for PostgreSQL Pod Management
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres # Name of the StatefulSet itself
+  namespace: bigdata
+spec:
+  serviceName: "postgres-headless" # Links to the Headless Service
+  replicas: 1 # Start with a single instance
+  selector:
+    matchLabels:
+      app: postgres-bigdata # Selector to find pods managed by this StatefulSet
+  template:
+    metadata:
+      labels:
+        app: postgres-bigdata # Label applied to the Pods
+    spec:
+      # Time to allow for graceful shutdown
+      terminationGracePeriodSeconds: 10
+      # --- Pod Security Context ---
+      # Adjusted for 'baseline' Pod Security Standard compatibility
+      # Runs as postgres user (UID 999) inside the container.
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999 # Ensures the volume group matches the container group
+        seccompProfile:
+          type: RuntimeDefault
+      # --- Container Definition ---
+      containers:
+      - name: postgres
+        image: postgres:15 # Using official PostgreSQL 15 image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+          name: postgresql # Network port
+        env:
+          # Database credentials sourced from the Secret
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              # Assumes a Secret named 'postgres-bigdata-secret' exists
+              # with keys POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+              name: postgres-bigdata-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-bigdata-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-bigdata-secret
+              key: POSTGRES_DB
+        # Data directory within the container
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgres-data # Mount the volume defined in volumeClaimTemplates
+          mountPath: /var/lib/postgresql/data # Standard data path for Postgres image
+        # --- Container Security Context ---
+        # Further restricts the container's privileges
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          # runAsNonRoot: true # Cannot be true if runAsUser is non-zero and specific
+        # --- Health Checks ---
+        readinessProbe:
+          exec:
+            # Use pg_isready to check if the server is accepting connections
+            command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)", "-h", "127.0.0.1", "-p", "5432"]
+          initialDelaySeconds: 10 # Wait before first probe
+          periodSeconds: 5      # Check every 5 seconds
+          timeoutSeconds: 2       # Timeout for the check
+          failureThreshold: 6     # Consider unhealthy after 6 failures
+          successThreshold: 1     # Consider healthy after 1 success
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)", "-h", "127.0.0.1", "-p", "5432"]
+          initialDelaySeconds: 30 # Wait longer before first liveness check
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+          successThreshold: 1
+        # --- Resource Limits (Adjust as needed) ---
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            # Be cautious with memory limits for databases
+            memory: "1Gi"
+  # --- Persistent Volume Claim Template ---
+  # Defines how PersistentVolumes are created for each Pod replica.
+  # A PVC named 'postgres-data-postgres-0' will be created for the first pod.
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data # Name referenced in volumeMounts
+    spec:
+      accessModes: [ "ReadWriteOnce" ] # Required by Longhorn & typical for DBs
+      storageClassName: "longhorn"     # Your cluster's StorageClass for Longhorn
+      resources:
+        requests:
+          storage: 10Gi              # Size of the volume for each replica
+
+---
+# 4. ClusterIP Service for Application Access
+# Provides a stable internal IP and DNS name for accessing the PostgreSQL instance
+# from other pods within the cluster (e.g., Hive Metastore).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-svc # Service name used by other applications
+  namespace: bigdata
+  labels:
+    app: postgres-bigdata
+spec:
+  type: ClusterIP # Default, but explicit
+  ports:
+  - port: 5432 # Port the service listens on
+    targetPort: 5432 # Port on the pod to forward traffic to
+    protocol: TCP
+    name: tcp-postgresql
+  selector:
+    app: postgres-bigdata # Selects pods managed by the StatefulSet
