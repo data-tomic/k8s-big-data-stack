@@ -168,5 +168,5 @@ At this point, we have successfully deployed a dedicated PostgreSQL database and
 This forms the crucial foundation for our data platform. In the next article, we will deploy Trino and configure it to use this Hive Metastore, enabling SQL queries against our future data lake.
 
 ---
-*Next Article: [Article 3: Deploying and Configuring Trino](./03-trino-setup-and-integration.md) (Link to be created)*
+*Next Article: [Article 3: Deploying and Configuring Trino](./03-trino-setup-and-integration.md)*
 
