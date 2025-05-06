@@ -56,7 +56,7 @@ We will deploy a standalone PostgreSQL instance using a StatefulSet for stable n
 
 1.  **Create the Manifest (`postgres-bigdata.yaml`):**
     This manifest defines the Secret (already created above, but included for completeness), PVC, Headless Service, StatefulSet, and ClusterIP Service.
-    *(The full content of `postgres-bigdata.yaml` can be found here: [../components/01-postgresql/postgres-bigdata.yaml](../components/01-postgresql/postgres-bigdata.yaml) - Ensure this path is correct relative to your article location)*
+    *(The full content of `postgres-bigdata.yaml` can be found here: [../components/01-postgresql/postgres-bigdata.yaml](../components/01-postgresql/postgres-bigdata.yaml)*
 
     *Key configurations within the manifest:*
     *   Uses the `postgres:15` image.
@@ -117,7 +117,7 @@ Since the Bitnami Helm chart for Hive is no longer available or easily accessibl
 
 3.  **Prepare `ilum-metastore-values.yaml`:**
     We need to configure the Ilum chart to use our external PostgreSQL and specify Minio as the default warehouse location.
-    *(The final content of `ilum-metastore-values.yaml` can be found here: [../components/02-hive-metastore/ilum-metastore-values.yaml](../components/02-hive-metastore/ilum-metastore-values.yaml) - Ensure path is correct)*
+    *(The final content of `ilum-metastore-values.yaml` can be found here: [../components/02-hive-metastore/ilum-metastore-values.yaml](../components/02-hive-metastore/ilum-metastore-values.yaml)*
 
     *Key configurations within the values file:*
     *   `postgresql.host`: `postgres-svc.bigdata.svc.cluster.local`
