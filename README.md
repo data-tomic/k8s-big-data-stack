@@ -52,8 +52,8 @@ Before starting the deployment process described in the articles, ensure you hav
 
 To deploy this stack, follow the articles in the `/articles` directory in numerical order. Each article corresponds to a step in setting up the infrastructure and deploying a component, referencing the necessary files in the `/components` directory.
 
-1.  **Start with:** [Article 1: Initial Kubernetes Cluster Survey and Big Data Stack Selection](./articles/01-initial-survey-and-stack-selection.md) (You are here)
-2.  **Proceed to:** [Article 2: Setting up PostgreSQL and Hive Metastore](./articles/02-postgresql-hive-metastore-setup.md) *(Link to be created)*
+1.  **Start with:** [Article 1: Initial Kubernetes Cluster Survey and Big Data Stack Selection](./articles/01-initial-survey-and-stack-selection.md) 
+2.  **Proceed to:** [Article 2: Setting up PostgreSQL and Hive Metastore](./articles/02-postgresql-hive-metastore-setup.md) 
 3.  ... and so on.
 
 ## Disclaimer
