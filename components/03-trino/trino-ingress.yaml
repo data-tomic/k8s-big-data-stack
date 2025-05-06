@@ -1,0 +1,52 @@
+# components/03-trino/trino-ingress.yaml
+#
+# Manual Ingress resource for exposing the Trino UI.
+# This is created separately because the official Trino Helm chart
+# had issues generating a valid Ingress spec in our tests.
+# Assumes Cert-Manager with a ClusterIssuer named 'pki-ca' is available.
+# Assumes Traefik is the Ingress Controller (using IngressClass).
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  # Using a distinct name to avoid conflicts with any Helm-managed resources
+  name: trino-manual-ingress
+  namespace: bigdata # Deployed in the same namespace as Trino
+  annotations:
+    # --- Cert-Manager Annotation ---
+    # Tells Cert-Manager to use the 'pki-ca' ClusterIssuer to get a certificate
+    cert-manager.io/cluster-issuer: "pki-ca"
+    # --- Traefik Specific Annotations (Optional) ---
+    # Example: Force HTTPS redirection (usually handled by Traefik config)
+    # traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    # traefik.ingress.kubernetes.io/router.tls: "true"
+    # Example: Add middleware (e.g., for headers or auth, if configured)
+    # traefik.ingress.kubernetes.io/router.middlewares: <your-namespace>-<your-middleware-name>@kubernetescrd
+spec:
+  # --- Ingress Controller ---
+  # Explicitly specify the IngressClass managed by Traefik
+  ingressClassName: traefik
+  # --- Routing Rules ---
+  rules:
+    # Rule for accessing the Trino UI via its hostname
+  - host: trino.k8s.dgoi.ru # The hostname configured for Trino access
+    http:
+      paths:
+      - path: / # Route all traffic from the root path
+        pathType: Prefix # Match any path starting with /
+        backend:
+          service:
+            # Service name of the Trino coordinator (as created by the Helm chart or manually)
+            name: trino
+            port:
+              # Port number of the Trino coordinator service (usually 8080 for HTTP)
+              number: 8080
+  # --- TLS Configuration ---
+  tls:
+    # Defines how TLS is handled for the specified hosts
+  - hosts:
+      # The hostname(s) included in the TLS certificate
+    - trino.k8s.dgoi.ru
+    # Name of the Kubernetes Secret where Cert-Manager will store the
+    # issued TLS certificate and private key.
+    secretName: trino-tls
