@@ -192,4 +192,4 @@ Trino is now successfully deployed and configured within the `bigdata` namespace
 The next step is to configure and test Apache Spark, ensuring it can also interact with the Hive Metastore and Minio to read and write data.
 
 ---
-*Next Article: [Article 4: Setting up Spark Operator and Running Jobs](./04-spark-operator-and-jobs.md) (Link to be created)*
+*Next Article: [Article 4: Setting up Spark Operator and Running Jobs](./04-spark-operator-and-jobs.md)*

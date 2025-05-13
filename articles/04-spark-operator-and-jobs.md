@@ -202,13 +202,100 @@ Spark applications running in the `bigdata` namespace will need a dedicated Serv
     # ... other monitoring commands ...
     ```
 
-## Step 5: Troubleshooting TLS for Harbor (If Encountered)
+## Step 5: Troubleshooting TLS for Harbor (If Encountered during Spark Application Image Pull)
 
-*(Content as previously defined, explaining Talos OS configuration for custom CA)*
+During our deployment, a common issue when pulling images from a private Harbor registry secured with a custom SSL certificate (e.g., self-signed or signed by an internal CA) is `ImagePullBackOff` with an error message similar to:
+
+`Failed to pull image "harbor.k8s.example.internal/bigdata/spark-app:latest": rpc error: code = Unknown desc = failed to pull and unpack image "harbor.k8s.example.internal/bigdata/spark-app:latest": failed to resolve reference "harbor.k8s.example.internal/bigdata/spark-app:latest": failed to do request: Head "https://harbor.k8s.example.internal/v2/bigdata/spark-app/manifests/latest": tls: failed to verify certificate: x509: certificate signed by unknown authority`
+
+This error indicates that the Kubernetes worker nodes (where `kubelet` and the container runtime operate) do not trust the Certificate Authority (CA) that signed Harbor's SSL certificate. For Talos OS, which uses a declarative configuration model, this requires updating the machine configuration on each relevant node.
+
+**Solution for Talos OS:**
+
+The core idea is to provide the CA certificate (or the full chain if intermediate CAs are involved) to each Talos node and configure the container runtime (containerd, in Talos's case) to trust this CA for your specific Harbor registry.
+
+1.  **Obtain Harbor's CA Certificate Chain:**
+    You need the PEM-encoded CA certificate(s) that signed your Harbor's SSL certificate.
+    *   **If using an internal Corporate CA:** Obtain the root CA certificate and any intermediate CA certificates from your PKI team.
+    *   **If Harbor uses a self-signed certificate:** The certificate Harbor uses *is* its own CA.
+    *   **To retrieve certificates from a live server (use with caution, verify authenticity):**
+        ```bash
+        # Replace harbor.k8s.example.internal with your Harbor FQDN
+        openssl s_client -showcerts -connect harbor.k8s.example.internal:443 < /dev/null 2>/dev/null | \
+        awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/{ if(/BEGIN CERTIFICATE/){a++}; out="harbor.ca."a".crt"; print >out}'
+        ```
+        This command will attempt to extract all certificates in the chain presented by the server. You'll typically need the root CA (often the last one in the chain if multiple are presented, or the only one if self-signed). Let's assume you save the necessary CA certificate(s) into a file named `harbor-ca-chain.pem`. Ensure it's in PEM format (`-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----`). If you have multiple (root + intermediate), concatenate them into this single file in order (server cert's issuer, then that issuer's issuer, up to the root).
+
+2.  **Prepare the Talos Machine Configuration Patch:**
+    You will need to modify the machine configuration files for your Talos worker nodes (and control-plane nodes if they also need to pull images from this Harbor, though typically image pulls for workloads happen on workers).
+
+    For each node, you'll add/update the `machine.files` section to place the CA certificate on the node, and the `machine.registries` section to configure containerd.
+
+    Create a patch file (e.g., `talos-harbor-ca-patch.yaml`) or directly edit your node's configuration YAML.
+
+    ```yaml
+    # Example patch content or section to add/modify in a node's Talos configuration YAML
+    # (e.g., talos-wk-01.yaml)
+    machine:
+      # ... other machine configurations ...
+
+      files:
+        - path: /etc/ssl/certs/harbor.k8s.example.internal.pem # Path on the Talos node where the CA cert will be stored
+          permissions: 0644
+          content: |
+            -----BEGIN CERTIFICATE-----
+            MII... (Full content of your harbor-ca-chain.pem) ...
+            -----END CERTIFICATE-----
+            # If you have multiple concatenated certs, they all go here.
+
+      registries:
+        # Mirrors and insecure registries configuration (deprecated in favor of config below for CAs)
+        # mirrors:
+        #   "harbor.k8s.example.internal":
+        #     overridePath: true # if harbor is on non-standard port
+        #     endpoint:
+        #       - "https://harbor.k8s.example.internal"
+        # containerd specific configuration for trusted CAs
+        config:
+          # The key here MUST be your Harbor's FQDN
+          "harbor.k8s.example.internal":
+            # This tells containerd to trust the CA cert(s) in this file for this specific registry
+            caFile: "/etc/ssl/certs/harbor.k8s.example.internal.pem"
+
+            # Alternative for completely insecure access (NOT RECOMMENDED FOR PRODUCTION):
+            # tls:
+            #   insecureSkipVerify: true
+    ```
+    *   **`machine.files.path`:** Choose a suitable path on the node, e.g., `/etc/ssl/certs/harbor.k8s.example.internal.pem`.
+    *   **`machine.files.content`:** Paste the full PEM content of your `harbor-ca-chain.pem` here, ensuring correct YAML indentation.
+    *   **`machine.registries.config`:** This is the modern way to configure registry mirrors and TLS settings for containerd in Talos. The key under `config` must be the FQDN of your Harbor registry.
+    *   **`caFile`:** Points to the path where you placed the CA certificate in `machine.files`.
+
+3.  **Apply Updated Configuration to Talos Nodes:**
+    For each worker node (and any control plane nodes if necessary), apply the updated configuration.
+    **Warning:** Applying a new machine configuration typically triggers a node reboot in Talos to ensure all changes are correctly applied. Plan for this downtime or perform rolling updates.
+
+    ```bash
+    # For each node, using its IP address and the updated YAML configuration file for that node
+    talosctl apply-config --insecure -n <node1-ip-address> -f <path-to-updated-node1-config.yaml>
+    talosctl apply-config --insecure -n <node2-ip-address> -f <path-to-updated-node2-config.yaml>
+    # ... and so on for all relevant nodes.
+    ```
+    Wait for each node to reboot and rejoin the cluster. You can monitor this with `talosctl health -n <node-ip>` or `kubectl get nodes -w`.
+
+4.  **Verify Image Pull:**
+    After all relevant nodes have been updated and are `Ready`, try deploying your `SparkApplication` again or simply try to pull an image from Harbor on one of the nodes (e.g., by creating a test pod that uses an image from Harbor).
+    ```bash
+    # Example test pod
+    # kubectl run harbor-test --image=harbor.k8s.example.internal/bigdata/spark-app:latest -n bigdata --rm -it -- /bin/true
+    ```
+    The `ImagePullBackOff` error related to TLS should now be resolved.
+
+This detailed procedure ensures that the container runtime on your Talos OS nodes trusts your Harbor's SSL certificate, allowing `kubectl` (via kubelet) to pull images securely.
 
 ## Conclusion
 
-*(Content as previously defined)*
+The Spark Operator is now installed, and we have successfully run a test Spark application, pulling a custom image from our private Harbor registry. Key troubleshooting steps for image pulling (credentials, TLS trust for custom CAs on Talos OS) and application execution (OOM) have been addressed. The foundation is laid for running more complex Spark ETL/ELT jobs that can interact with MinIO and Hive Metastore.
 
 ---
 *Next Article: [Article 5: Deploying Apache Superset for Business Intelligence](./05-superset-deployment.md)*
