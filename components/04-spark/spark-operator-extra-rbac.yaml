@@ -1,0 +1,32 @@
+# components/04-spark/spark-operator-extra-rbac.yaml
+# (или components/00-namespace-rbac/spark-operator-extra-rbac.yaml)
+#
+# Этот манифест добавляет права для ServiceAccount Spark Operator'a
+# на создание событий (events) в его собственном неймспейсе 'spark-operator'.
+# Это нужно для корректной работы оператора (например, для событий LeaderElection).
+# Убедитесь, что 'subjects[0].name' соответствует имени ServiceAccount вашего оператора.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-operator-event-writer # Имя для этой специфичной роли
+  namespace: spark-operator # Права даются в неймспейсе оператора
+rules:
+- apiGroups: [""] # Пустая группа для core API
+  resources: ["events"]
+  verbs: ["create", "patch", "get", "list", "watch"] # Добавил больше прав для полноты
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-operator-event-writer-binding # Имя для привязки
+  namespace: spark-operator
+subjects:
+- kind: ServiceAccount
+  # Убедитесь, что это правильное имя ServiceAccount вашего Spark Operator'a
+  # Обычно это <helm-release-name>-controller, например 'spark-operator-controller'
+  name: spark-operator-controller
+  namespace: spark-operator
+roleRef:
+  kind: Role
+  name: spark-operator-event-writer # Ссылка на Role, созданную выше
+  apiGroup: rbac.authorization.k8s.io

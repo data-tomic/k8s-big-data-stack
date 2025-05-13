@@ -1,0 +1,25 @@
+# components/04-spark/spark-operator-values.yaml
+controller:
+  serviceAccount:
+    create: true # Пусть чарт создаст SA для самого оператора
+  rbac:
+    create: true # Пусть чарт создаст RBAC для самого оператора
+
+webhook:
+  enable: true # Включаем вебхук
+
+spark:
+  # В каких неймспейсах оператор будет искать SparkApplications
+  # и создавать RBAC для Spark-драйверов
+  jobNamespaces:
+    - "bigdata"
+  # Настройки для ServiceAccount Spark-драйверов в jobNamespaces
+  serviceAccount:
+    create: true # Говорим чарту создать SA в 'bigdata'
+    # Явно задаем имя 'spark-sa', чтобы оно совпадало с тем,
+    # на которое мы ссылаемся в SparkApplication.spec.driver.serviceAccountName
+    # и которое мы, возможно, создали ранее вручную (хотя теперь чарт его создаст).
+    name: "spark-sa"
+  # Настройки для RBAC Spark-драйверов в jobNamespaces
+  rbac:
+    create: true # Говорим чарту создать Role и RoleBinding для 'spark-sa' в 'bigdata'

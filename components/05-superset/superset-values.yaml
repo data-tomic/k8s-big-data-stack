@@ -1,0 +1,48 @@
+# superset-values.yaml
+envFromSecret: "superset-env" # Убедитесь, что это есть или используется по умолчанию
+
+image:
+  repository: harbor.k8s.dgoi.ru/bigdata/superset-with-psycopg2
+  tag: "4.1.2"
+  pullPolicy: IfNotPresent
+
+postgresql:
+  enabled: true
+  persistence:
+    enabled: true
+  auth:
+    username: "superset"
+    password: "YOURSTRONGPASSWORD"
+    database: "superset"
+
+redis:
+  enabled: true
+  # auth:
+  #   enabled: false # По умолчанию без пароля
+
+supersetNode:
+  resources: { requests: { cpu: "500m", memory: "1Gi" }, limits: { cpu: "1", memory: "2Gi" } }
+supersetWorker:
+  resources: { requests: { cpu: "500m", memory: "1Gi" }, limits: { cpu: "1", memory: "2Gi" } }
+supersetCeleryBeat:
+  resources: { requests: { cpu: "200m", memory: "512Mi" }, limits: { cpu: "500m", memory: "1Gi" } }
+
+ingress:
+  enabled: true
+  ingressClassName: "traefik"
+  hosts: [ "superset.k8s.example.com" ]
+  path: /
+  pathType: Prefix
+  tls:
+    - secretName: "superset-tls"
+      hosts: [ "superset.k8s.example.com" ]
+  annotations:
+    cert-manager.io/cluster-issuer: "your-pki-ca"
+
+init:
+  adminUser:
+    username: "admin"
+    password: "YOURSTRONGPASSWORD"
+    firstname: "Admin"
+    lastname: "User"
+    email: "chuck.norris@example.com"

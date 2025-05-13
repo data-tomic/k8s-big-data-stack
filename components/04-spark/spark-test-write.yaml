@@ -1,0 +1,54 @@
+# components/04-spark/spark-test-write.yaml
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: spark-write-test
+  namespace: bigdata
+spec:
+  type: Python
+  mode: cluster
+  pythonVersion: "3"
+  image: "harbor.k8s.dgoi.ru/bigdata/spark:3.5.5-debian-12-r5" # Убедитесь, что этот образ точно есть и доступен в Harbor
+  imagePullPolicy: IfNotPresent # Или Always, если хотите быть уверены, что всегда тянется последняя версия (если обновляете образ с тем же тегом)
+  # --------------------------------------------------------------------------------
+  mainApplicationFile: "local:///app/write_test.py"
+  sparkVersion: "3.5" # Рассмотрите обновление до "3.5.5" для соответствия образу, если это возможно/необходимо
+  restartPolicy:
+    type: OnFailure              # <--- ИЗМЕНЕНО
+    onFailureRetries: 3          # <--- ДОБАВЛЕНО (или ваше значение)
+    onFailureRetryInterval: 10   # <--- ДОБАВЛЕНО (интервал в секундах)
+  driver:
+    cores: 1
+    memory: "2048m"              # <--- ИЗМЕНЕНО (или "2g")
+    labels:
+      version: "3.5"
+    serviceAccount: spark-sa
+    volumeMounts:
+      - name: spark-script-volume
+        mountPath: /app
+    envFrom:
+      - secretRef:
+          name: minio-s3-secret
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1024m" # Можно оставить 1g для начала, но если задачи будут сложными, тоже потребуется увеличить
+    labels:
+      version: "3.5"
+    envFrom:
+      - secretRef:
+          name: minio-s3-secret
+  volumes:
+    - name: spark-script-volume
+      configMap:
+        name: spark-write-script # Убедитесь, что эта ConfigMap существует в namespace bigdata и содержит ваш write_test.py
+  sparkConf:
+    "spark.sql.catalogImplementation": "hive"
+    "spark.hadoop.hive.metastore.uris": "thrift://ilum-hive-metastore.bigdata.svc.cluster.local:9083"
+    "spark.sql.warehouse.dir": "s3a://spark-data/warehouse/"
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.endpoint": "http://minio.minio.svc.cluster.local:9000"
+    "spark.hadoop.fs.s3a.path.style.access": "true"
+    "spark.hadoop.fs.s3a.connection.ssl.enabled": "false"
+    "spark.hadoop.fs.s3a.access.key": "$(MINIO_ACCESS_KEY)"
+    "spark.hadoop.fs.s3a.secret.key": "$(MINIO_SECRET_KEY)"
